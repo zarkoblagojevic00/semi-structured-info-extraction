@@ -91,7 +91,8 @@ class Document:
 
         card = self.crop_apple_card(img_hsv)
         if card is not None:
-            return self.extract_apple_person(card)
+            card, orange_part_height, orange_part_width = card
+            return self.extract_apple_person(card, orange_part_height, orange_part_width)
 
         card = self.crop_google_card(img_hsv)
         if card is not None:
@@ -139,7 +140,10 @@ class Document:
         # plt.show()
 
         img_cropped_gray = cv2.cvtColor(img_cropped, cv2.COLOR_BGR2GRAY)
-        return img_cropped if self.extractor.is_face_on_img(img_cropped_gray) else None
+        return \
+            img_cropped if self.extractor.is_face_on_img(img_cropped_gray) else None, \
+            higher, \
+            lower
 
     def crop_google_card(self, img_hsv):
         mask_google = cv2.inRange(img_hsv, np.array([85, 125, 0]), np.array([91, 255, 255]), )
@@ -222,12 +226,138 @@ class Document:
         return img_cropped if self.extractor.is_face_on_img(img_cropped_gray) else None
 
 
+    def extract_apple_person(self, card, orange_part_height, orange_part_width):
+
+        ################################################# SSN #########################################################
+        card_hsv = cv2.cvtColor(card, cv2.COLOR_BGR2HSV)
+        mask_apple = cv2.inRange(card_hsv, np.array([20, 190, 0]), np.array([21, 255, 255]))
+
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (20, 15))
+        mask_apple = cv2.morphologyEx(mask_apple, cv2.MORPH_CLOSE, kernel)
+
+        # plt.imshow(mask_apple, 'gray')
+        # plt.show()
+
+        _, contours, _ = cv2.findContours(mask_apple, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if len(contours) < 1:
+            return None
+
+        ssn_boxes = []
+        for contour in contours:
+
+            _, _, higher, lower = get_min_area_rect_data(contour)
+            if higher > 30:
+                ssn_boxes.append(contour)
+
+        if len(ssn_boxes) < 1:
+            return None
+        ssn_box = max(ssn_boxes, key=lambda cnt: cv2.boundingRect(cnt)[2])
+
+        x, y, w, h = cv2.boundingRect(ssn_box)
+        ssn_box_crop = card[y-int(h*0.3): y+int(h*1.3), x-10: x+w+10]
+        # plt.imshow(ssn_box_crop)
+        # plt.show()
+
+        # https://docs.opencv.org/4.x/d4/d13/tutorial_py_filtering.html
+        ssn_box_crop = make_black_border_img(fix_contrast(cv2.cvtColor(ssn_box_crop, cv2.COLOR_BGR2GRAY)))
+        _, ssn_bin = cv2.threshold(ssn_box_crop, 0, 255, cv2.THRESH_OTSU)
+
+        # plt.imshow(ssn_bin, 'gray')
+        # plt.show()
+
+        ssn_boxes = self.ocr_tool.image_to_string(
+            Image.fromarray(ssn_bin), lang=self.lang,
+            builder=pyocr.builders.LineBoxBuilder(tesseract_layout=7)
+        )
+
+        ssn = ""
+        for i, line in enumerate(ssn_boxes):
+            ssn = capitalize_words(line.content.strip())
+            print('line %d: ' % i, ssn, line.position)
+        print()
+
+        # plt.imshow(card)
+        # plt.show()
+
+        elem_height = int(w*0.165)
+
+        ################################################# SSN #########################################################
+        pointer = y - 3*elem_height
+        date_of_birth_box_crop = card[pointer-int(h*0.4): pointer+int(h*1.6), x-int(w*0.5): x+int(w*1.2)]
 
 
+        date_of_birth_box_crop = make_black_border_img(fix_contrast(cv2.cvtColor(date_of_birth_box_crop, cv2.COLOR_BGR2GRAY)))
+        _, date_of_birth_bin = cv2.threshold(date_of_birth_box_crop, 0, 255, cv2.THRESH_OTSU)
 
+        # plt.imshow(date_of_birth_bin, 'gray')
+        # plt.show()
 
-    def extract_apple_person(self, card):
-        return None
+        date_of_birth_boxes = self.ocr_tool.image_to_string(
+            Image.fromarray(date_of_birth_bin), lang=self.lang,
+            builder=pyocr.builders.LineBoxBuilder(tesseract_layout=7)
+        )
+
+        date_of_birth = ""
+        for i, line in enumerate(date_of_birth_boxes):
+            date_of_birth = capitalize_words(line.content.strip())
+            print('line %d: ' % i, date_of_birth, line.position)
+        print()
+
+        ################################################# NAME #########################################################
+        pointer -= 3 * elem_height
+        name_box_crop = card[pointer - int(h * 0.4): pointer + int(h * 1.6),
+                                 x - int(w * 0.5): x + int(w * 1.2)]
+
+        # plt.imshow(name_box_crop)
+        # plt.show()
+
+        name_box_crop = make_black_border_img(
+            fix_contrast(cv2.cvtColor(name_box_crop, cv2.COLOR_BGR2GRAY)))
+        _, name_bin = cv2.threshold(name_box_crop, 0, 255, cv2.THRESH_OTSU)
+
+        # plt.imshow(name_bin, 'gray')
+        # plt.show()
+
+        name_boxes = self.ocr_tool.image_to_string(
+            Image.fromarray(name_bin), lang=self.lang,
+            builder=pyocr.builders.LineBoxBuilder(tesseract_layout=7)
+        )
+
+        name = ""
+        for i, line in enumerate(name_boxes):
+            name = capitalize_words(line.content.strip())
+            print('line %d: ' % i, name, line.position)
+        print()
+
+        ################################################# JOB #########################################################
+        pointer -= elem_height
+        job_box_crop = card[pointer - int(h * 0.4): pointer + int(h * 1.6),
+                        x - int(w * 0.5): x + int(w * 1.2)]
+
+        # plt.imshow(job_box_crop)
+        # plt.show()
+
+        job_box_crop = make_black_border_img(
+            fix_contrast(cv2.cvtColor(job_box_crop, cv2.COLOR_BGR2GRAY)))
+        _, job_bin = cv2.threshold(job_box_crop, 0, 255, cv2.THRESH_OTSU)
+
+        # plt.imshow(job_bin, 'gray')
+        # plt.show()
+
+        job_boxes = self.ocr_tool.image_to_string(
+            Image.fromarray(job_bin), lang=self.lang,
+            builder=pyocr.builders.LineBoxBuilder(tesseract_layout=7)
+        )
+
+        job = ""
+        for i, line in enumerate(job_boxes):
+            job = capitalize_words(line.content.strip())
+            print('line %d: ' % i, job, line.position)
+        print()
+
+        company = 'Apple'
+
+        return Person(name, parse_date(date_of_birth), job, ssn, company)
 
     def extract_google_person(self, card):
         card_hsv = cv2.cvtColor(card, cv2.COLOR_BGR2HSV)
@@ -283,7 +413,6 @@ class Document:
         # plt.imshow(crop_ssn, 'gray')
         # plt.show()
 
-
         ssn_boxes = self.ocr_tool.image_to_string(
             Image.fromarray(crop_ssn), lang=self.lang,
             builder=pyocr.builders.LineBoxBuilder(tesseract_layout=7)
@@ -294,8 +423,6 @@ class Document:
             ssn = capitalize_words(line.content.strip())
             print('line %d: ' % i, ssn, line.position)
         print()
-
-
 
         ################################################# JOB #########################################################
         job_height = ssn_height + dist
@@ -342,8 +469,15 @@ class Document:
 
 
 
+
+
+
+
     def extract_ibm_person(self, card):
-        return None
+        pass
+
+
+
 
     def hsv_picker(self, image):
         def nothing(x):
@@ -429,7 +563,7 @@ ibm = [
 
 google = [i for i in range(0, 150) if i not in ibm and i not in apple]
 
-list = apple
+list = ibm
 paths = [f'./dataset/validation/image_{item}.bmp' for item in list]
 for path in paths:
     ocr_tool = pyocr.get_available_tools()[0]
