@@ -3,8 +3,8 @@ import cv2
 from PIL import Image
 import matplotlib.pyplot as plt
 import numpy as np
-from face import FaceExtractor
 from datetime import datetime
+
 
 
 class Person:
@@ -281,7 +281,7 @@ class Document:
 
         elem_height = int(w*0.165)
 
-        ################################################# SSN #########################################################
+        ################################################# DOB #########################################################
         pointer = y - 3*elem_height
         date_of_birth_box_crop = card[pointer-int(h*0.4): pointer+int(h*1.6), x-int(w*0.5): x+int(w*1.2)]
 
@@ -464,116 +464,152 @@ class Document:
         company = 'Google'
         return Person(name, parse_date(date_of_birth), job, ssn, company)
 
-
-
-
-
-
-
-
-
-
     def extract_ibm_person(self, card):
-        pass
+        ################################################# NAME #########################################################
+        card_gray = fix_contrast(cv2.cvtColor(card, cv2.COLOR_RGB2GRAY))
+        _, mask_ibm = cv2.threshold(card_gray, 10, 255, cv2.THRESH_BINARY)
+        mask_ibm = 255 - mask_ibm
+        # plt.imshow(mask_ibm, 'gray')
+        # plt.show()
 
+        _, contours, _ = cv2.findContours(mask_ibm, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if len(contours) < 1:
+            return None
 
+        name_boxes = []
+        for contour in contours:
 
+            _, _, higher, lower = get_min_area_rect_data(contour)
+            if higher > 30:
+                name_boxes.append(contour)
 
-    def hsv_picker(self, image):
-        def nothing(x):
-            pass
+        if len(name_boxes) < 1:
+            return None
+        name_box = max(name_boxes, key=lambda cnt: cv2.boundingRect(cnt)[2])
 
-        # Load image
+        x, y, w, h = cv2.boundingRect(name_box)
+        name_box_crop = card[y: y + h, x: x + w]
 
-        # Create a window
-        cv2.namedWindow('image')
+        name_box_crop = make_black_border_img(
+            fix_contrast(cv2.cvtColor(name_box_crop, cv2.COLOR_BGR2GRAY)))
+        _, name_bin = cv2.threshold(name_box_crop, 0, 255, cv2.THRESH_OTSU)
+        name_bin = 255 - cv2.erode(name_bin, (3, 3))
 
-        # Create trackbars for color change
-        # Hue is from 0-179 for Opencv
-        cv2.createTrackbar('HMin', 'image', 0, 179, nothing)
-        cv2.createTrackbar('SMin', 'image', 0, 255, nothing)
-        cv2.createTrackbar('VMin', 'image', 0, 255, nothing)
-        cv2.createTrackbar('HMax', 'image', 0, 179, nothing)
-        cv2.createTrackbar('SMax', 'image', 0, 255, nothing)
-        cv2.createTrackbar('VMax', 'image', 0, 255, nothing)
+        # plt.imshow(name_bin, 'gray')
+        # plt.show()
 
-        # Set default value for Max HSV trackbars
-        cv2.setTrackbarPos('HMax', 'image', 179)
-        cv2.setTrackbarPos('SMax', 'image', 255)
-        cv2.setTrackbarPos('VMax', 'image', 255)
+        name_boxes = self.ocr_tool.image_to_string(
+            Image.fromarray(name_bin), lang=self.lang,
+            builder=pyocr.builders.LineBoxBuilder(tesseract_layout=7)
+        )
 
-        # Initialize HSV min/max values
-        hMin = sMin = vMin = hMax = sMax = vMax = 0
-        phMin = psMin = pvMin = phMax = psMax = pvMax = 0
+        name = ""
+        for i, line in enumerate(name_boxes):
+            name = capitalize_words(line.content.strip())
+            print('line %d: ' % i, name, line.position)
+        print()
 
-        while (1):
-            # Get current positions of all trackbars
-            hMin = cv2.getTrackbarPos('HMin', 'image')
-            sMin = cv2.getTrackbarPos('SMin', 'image')
-            vMin = cv2.getTrackbarPos('VMin', 'image')
-            hMax = cv2.getTrackbarPos('HMax', 'image')
-            sMax = cv2.getTrackbarPos('SMax', 'image')
-            vMax = cv2.getTrackbarPos('VMax', 'image')
+        elem_height = int(h * 1.1)
+        ################################################# SSN #########################################################
+        pointer = y + elem_height
+        ssn_box_crop = card[pointer: pointer + int(elem_height*0.68), x + int(w*0.05): x + w]
 
-            # Set minimum and maximum HSV values to display
-            lower = np.array([hMin, sMin, vMin])
-            upper = np.array([hMax, sMax, vMax])
+        ssn_box_crop = make_black_border_img(
+            fix_contrast(cv2.cvtColor(ssn_box_crop, cv2.COLOR_BGR2GRAY)))
+        _, ssn_bin = cv2.threshold(ssn_box_crop, 0, 255, cv2.THRESH_OTSU)
+        ssn_bin = 255 - ssn_bin
 
-            # Convert to HSV format and color threshold
-            hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-            mask = cv2.inRange(hsv, lower, upper)
-            result = cv2.bitwise_and(image, image, mask=mask)
+        # plt.imshow(ssn_bin, 'gray')
+        # plt.show()
 
-            # Print if there is a change in HSV value
-            if ((phMin != hMin) | (psMin != sMin) | (pvMin != vMin) | (phMax != hMax) | (psMax != sMax) | (
-                    pvMax != vMax)):
-                print("(hMin = %d , sMin = %d, vMin = %d), (hMax = %d , sMax = %d, vMax = %d)" % (
-                    hMin, sMin, vMin, hMax, sMax, vMax))
-                phMin = hMin
-                psMin = sMin
-                pvMin = vMin
-                phMax = hMax
-                psMax = sMax
-                pvMax = vMax
+        ssn_boxes = self.ocr_tool.image_to_string(
+            Image.fromarray(ssn_bin), lang=self.lang,
+            builder=pyocr.builders.LineBoxBuilder(tesseract_layout=7)
+        )
 
-            # Display result image
-            cv2.imshow('image', result)
-            if cv2.waitKey(10) & 0xFF == ord('q'):
-                break
+        ssn = ""
+        for i, line in enumerate(ssn_boxes):
+            ssn = capitalize_words(line.content.strip())
+            print('line %d: ' % i, ssn, line.position)
+        print()
 
-        cv2.destroyAllWindows()
+        ################################################# JOB #########################################################
+        pointer = pointer + elem_height
+        job_box_crop = card[pointer: pointer + int(elem_height * 0.68), x + int(w * 0.25): x + w]
 
+        job_box_crop = make_black_border_img(
+            fix_contrast(cv2.cvtColor(job_box_crop, cv2.COLOR_BGR2GRAY)))
+        _, job_bin = cv2.threshold(job_box_crop, 0, 255, cv2.THRESH_OTSU)
 
-apple = [
-    0, 3, 7, 14, 15, 21, 23, 24, 26, 30,
-    34, 36, 37, 41, 42, 48, 49, 60, 64, 65,
-    72, 76, 77, 81, 82, 84, 87, 90, 92, 94,
-    96, 101, 109, 112, 116, 117, 118, 124, 126, 127,
-    130, 133, 140, 143
-]
+        # plt.imshow(job_bin, 'gray')
+        # plt.show()
 
-ibm = [
-    2, 4, 8, 13, 17, 20, 22, 27, 28, 31,
-    32, 40, 44, 45, 47, 51, 52, 53, 56, 57,
-    58, 63, 66, 67, 69, 71, 75, 83, 85, 86,
-    88, 89, 91, 97, 98, 99, 102, 103, 105, 106,
-    107, 113, 114, 115, 119, 121, 122, 123, 129, 132,
-    135, 137, 139, 141, 144, 145, 147
-]
+        job_boxes = self.ocr_tool.image_to_string(
+            Image.fromarray(job_bin), lang=self.lang,
+            builder=pyocr.builders.LineBoxBuilder(tesseract_layout=7)
+        )
 
-google = [i for i in range(0, 150) if i not in ibm and i not in apple]
+        job = ""
+        for i, line in enumerate(job_boxes):
+            job = capitalize_words(line.content.strip())
+            print('line %d: ' % i, job, line.position)
+        print()
 
-list = ibm
-paths = [f'./dataset/validation/image_{item}.bmp' for item in list]
-for path in paths:
-    ocr_tool = pyocr.get_available_tools()[0]
-    extractor = FaceExtractor()
+        ################################################# DOB #########################################################
+        pointer = pointer + elem_height
+        date_of_birth_box_crop = card[pointer: pointer + int(elem_height * 0.68), x + int(w * 0.25): x + w]
 
-    # words = ["joshua Chase", "Joshua Chase", "Robert Downey jr.", "Paul McCartney", "debora's Highnes DDS II", "second 2nd son"]
-    # for word in words:
-    #     print(clean_words(word))
-    # dates = ["23 Dec 2020", "Dec 2020", "Dec 202a"]
-    # for date in dates:
-    #     print(parse_date(date))
-    doc = Document(path, ocr_tool, extractor)
-    doc.read_person_data()
+        date_of_birth_box_crop = make_black_border_img(
+            fix_contrast(cv2.cvtColor(date_of_birth_box_crop, cv2.COLOR_BGR2GRAY)))
+        _, date_of_birth_bin = cv2.threshold(date_of_birth_box_crop, 0, 255, cv2.THRESH_OTSU)
+
+        # plt.imshow(date_of_birth_bin, 'gray')
+        # plt.show()
+
+        date_of_birth_boxes = self.ocr_tool.image_to_string(
+            Image.fromarray(date_of_birth_bin), lang=self.lang,
+            builder=pyocr.builders.LineBoxBuilder(tesseract_layout=7)
+        )
+
+        date_of_birth = ""
+        for i, line in enumerate(date_of_birth_boxes):
+            date_of_birth = capitalize_words(line.content.strip())
+            print('line %d: ' % i, date_of_birth, line.position)
+        print()
+
+        company = 'IBM'
+        return Person(name, parse_date(date_of_birth), job, ssn, company)
+
+# apple = [
+#     0, 3, 7, 14, 15, 21, 23, 24, 26, 30,
+#     34, 36, 37, 41, 42, 48, 49, 60, 64, 65,
+#     72, 76, 77, 81, 82, 84, 87, 90, 92, 94,
+#     96, 101, 109, 112, 116, 117, 118, 124, 126, 127,
+#     130, 133, 140, 143
+# ]
+#
+# ibm = [
+#     2, 4, 8, 13, 17, 20, 22, 27, 28, 31,
+#     32, 40, 44, 45, 47, 51, 52, 53, 56, 57,
+#     58, 63, 66, 67, 69, 71, 75, 83, 85, 86,
+#     88, 89, 91, 97, 98, 99, 102, 103, 105, 106,
+#     107, 113, 114, 115, 119, 121, 122, 123, 129, 132,
+#     135, 137, 139, 141, 144, 145, 147
+# ]
+#
+# google = [i for i in range(0, 150) if i not in ibm and i not in apple]
+#
+# list = ibm
+# paths = [f'./dataset/validation/image_{item}.bmp' for item in list]
+# for path in paths:
+#     ocr_tool = pyocr.get_available_tools()[0]
+#     extractor = FaceExtractor()
+#
+#     # words = ["joshua Chase", "Joshua Chase", "Robert Downey jr.", "Paul McCartney", "debora's Highnes DDS II", "second 2nd son"]
+#     # for word in words:
+#     #     print(clean_words(word))
+#     # dates = ["23 Dec 2020", "Dec 2020", "Dec 202a"]
+#     # for date in dates:
+#     #     print(parse_date(date))
+#     doc = Document(path, ocr_tool, extractor)
+#     doc.read_person_data()
