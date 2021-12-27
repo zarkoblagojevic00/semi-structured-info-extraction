@@ -4,6 +4,20 @@ from PIL import Image
 import matplotlib.pyplot as plt
 import numpy as np
 from face import FaceExtractor
+from datetime import datetime
+
+
+class Person:
+    """
+    Klasa koja opisuje prepoznatu osobu sa slike. Neophodno je prepoznati samo vrednosti koje su opisane u ovoj klasi
+    """
+    def __init__(self, name: str = None, date_of_birth: datetime.date = None, job: str = None, ssn: str = None,
+                 company: str = None):
+        self.name = name
+        self.date_of_birth = date_of_birth
+        self.job = job
+        self.ssn = ssn
+        self.company = company
 
 
 # https://docs.opencv.org/3.4/d4/d61/tutorial_warp_affine.html
@@ -33,7 +47,34 @@ def fix_contrast(img_gray):
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     return clahe.apply(img_gray)
 
+def remove_non_alphan(word: str):
+    return ''.join(c for c in word if c.isalnum() or c in ["-", "," "."])
 
+def capitalize_words(words: str):
+    return ' '.join([remove_non_alphan(word).capitalize() if not word.isupper() else word for word in words.split(' ')])
+
+def parse_date(date: str):
+    format = '%d %b %Y'
+    try:
+        return datetime.strptime(date, format)
+    except Exception:
+        print(f'Invalid date: {date}')
+        return datetime(2020, 12, 23)
+
+
+# https: // docs.opencv.org / 3.4 / dc / da3 / tutorial_copyMakeBorder.html
+def make_black_border_img(img):
+    width, height = img.shape[1], img.shape[0]
+    percent = 0.05
+    top = int(3 * percent * height)
+    bottom = top
+    left = int(percent * width)
+    right = left
+    value = cv2.mean(img)
+
+    border = cv2.copyMakeBorder(img, top, bottom, left, right, borderType=cv2.BORDER_CONSTANT, value=value)
+
+    return border
 
 
 
@@ -94,8 +135,8 @@ class Document:
 
         x, y = center
         img_cropped = img_rotated[int(y - higher / 2):int(y + higher / 2), int(x - lower / 2): int(x + 8 * lower)]
-        plt.imshow(img_cropped)
-        plt.show()
+        # plt.imshow(img_cropped)
+        # plt.show()
 
         img_cropped_gray = cv2.cvtColor(img_cropped, cv2.COLOR_BGR2GRAY)
         return img_cropped if self.extractor.is_face_on_img(img_cropped_gray) else None
@@ -133,8 +174,8 @@ class Document:
         x, y = center
         img_cropped = img_rotated[int(y - 2.6 * lower / 2):int(y + 2.3 * lower / 2 - 10),
                       int(x - higher / 2): int(x + 2.1 * higher / 2)]
-        plt.imshow(img_cropped)
-        plt.show()
+        # plt.imshow(img_cropped)
+        # plt.show()
         img_cropped_gray = cv2.cvtColor(img_cropped, cv2.COLOR_BGR2GRAY)
         return img_cropped if self.extractor.is_face_on_img(img_cropped_gray) else None
 
@@ -174,8 +215,8 @@ class Document:
         x, y = center
         img_cropped = img_rotated[int(y - lower / 2 + 10):int(y + lower / 2 - 10),
                       int(x - higher / 2 + 10): int(x + higher / 2 - 10)]
-        plt.imshow(img_cropped)
-        plt.show()
+        # plt.imshow(img_cropped)
+        # plt.show()
 
         img_cropped_gray = cv2.cvtColor(img_cropped, cv2.COLOR_BGR2GRAY)
         return img_cropped if self.extractor.is_face_on_img(img_cropped_gray) else None
@@ -186,13 +227,123 @@ class Document:
 
 
     def extract_apple_person(self, card):
-        pass
+        return None
 
     def extract_google_person(self, card):
-        pass
+        card_hsv = cv2.cvtColor(card, cv2.COLOR_BGR2HSV)
+        mask_google = cv2.inRange(card_hsv, np.array([85, 75, 0]), np.array([92, 255, 255]), )
+        contrasted = fix_contrast(cv2.cvtColor(card, cv2.COLOR_BGR2GRAY))
+        inv = 255 - contrasted
+
+        width, height = card.shape[1], card.shape[0]
+        crop_info = inv[int(height/5): height - int(height/4.25), int(width/28): width - int(width/2.6)]
+        if crop_info.shape[0] < 200:
+            crop_info = cv2.resize(crop_info, (350, 200), cv2.INTER_CUBIC)
+
+        # plt.imshow(crop_info, 'gray')
+        # plt.show()
+
+        info_w, info_h = crop_info.shape[1], crop_info.shape[0]
+        crop_name = crop_info[0:int(info_h/5), :]
+        # plt.imshow(crop_name, 'gray')
+        # plt.show()
+        # self.hsv_picker(card)
+
+        name_boxes = self.ocr_tool.image_to_string(
+            Image.fromarray(crop_name), lang=self.lang,
+            builder=pyocr.builders.LineBoxBuilder(tesseract_layout=7)
+        )
+
+        name = ""
+        for i, line in enumerate(name_boxes):
+            name = capitalize_words(line.content.strip())
+            print('line %d: ' % i, name, line.position)
+        print()
+
+        crop_rest = crop_info[int(info_h / 5):, int(info_w/2.4):]
+
+        rest_height, rest_width = crop_rest.shape[0], crop_rest.shape[1]
+        ideal_height = 160
+        aspect = ideal_height/rest_height
+        if rest_height > ideal_height:
+            crop_rest = cv2.resize(crop_rest, (int(aspect * rest_width), ideal_height), cv2.INTER_CUBIC)
+
+        rest_height, rest_width = crop_rest.shape[0], crop_rest.shape[1]
+        # plt.imshow(crop_rest, 'gray')
+        # plt.show()
+
+        ################################################# SSN #########################################################
+        dist = int(rest_height / 5.2)
+
+        base_height = int(rest_height / 6.8)
+        ssn_height = base_height + dist
+
+        crop_ssn = crop_rest[base_height:ssn_height, :]
+        crop_ssn = make_black_border_img(crop_ssn)
+        # plt.imshow(crop_ssn, 'gray')
+        # plt.show()
+
+
+        ssn_boxes = self.ocr_tool.image_to_string(
+            Image.fromarray(crop_ssn), lang=self.lang,
+            builder=pyocr.builders.LineBoxBuilder(tesseract_layout=7)
+        )
+
+        ssn = ""
+        for i, line in enumerate(ssn_boxes):
+            ssn = capitalize_words(line.content.strip())
+            print('line %d: ' % i, ssn, line.position)
+        print()
+
+
+
+        ################################################# JOB #########################################################
+        job_height = ssn_height + dist
+        crop_job = crop_rest[ssn_height: job_height, :]
+        crop_job = make_black_border_img(crop_job)
+
+        # plt.imshow(crop_job, 'gray')
+        # plt.show()
+
+        job_boxes = self.ocr_tool.image_to_string(
+            Image.fromarray(crop_job), lang=self.lang,
+            builder=pyocr.builders.LineBoxBuilder(tesseract_layout=7)
+        )
+
+        job = ""
+        for i, line in enumerate(job_boxes):
+            job = capitalize_words(line.content.strip())
+            print('line %d: ' % i, job, line.position)
+        print()
+
+        ################################################# DOB #########################################################
+        date_of_birth_height = job_height + dist
+        crop_date_of_birth = crop_rest[job_height: date_of_birth_height, :]
+        crop_date_of_birth = make_black_border_img(crop_date_of_birth)
+        # plt.imshow(crop_date_of_birth, 'gray')
+        # plt.show()
+
+        date_of_birth_boxes = self.ocr_tool.image_to_string(
+            Image.fromarray(crop_date_of_birth), lang=self.lang,
+            builder=pyocr.builders.LineBoxBuilder(tesseract_layout=7)
+        )
+
+        date_of_birth = ""
+        for i, line in enumerate(date_of_birth_boxes):
+            date_of_birth = capitalize_words(line.content.strip())
+            print('line %d: ' % i, date_of_birth, line.position)
+        print()
+
+        company = 'Google'
+        return Person(name, parse_date(date_of_birth), job, ssn, company)
+
+
+
+
+
 
     def extract_ibm_person(self, card):
-        pass
+        return None
 
     def hsv_picker(self, image):
         def nothing(x):
@@ -278,11 +429,17 @@ ibm = [
 
 google = [i for i in range(0, 150) if i not in ibm and i not in apple]
 
-list = google
+list = apple
 paths = [f'./dataset/validation/image_{item}.bmp' for item in list]
 for path in paths:
     ocr_tool = pyocr.get_available_tools()[0]
     extractor = FaceExtractor()
 
+    # words = ["joshua Chase", "Joshua Chase", "Robert Downey jr.", "Paul McCartney", "debora's Highnes DDS II", "second 2nd son"]
+    # for word in words:
+    #     print(clean_words(word))
+    # dates = ["23 Dec 2020", "Dec 2020", "Dec 202a"]
+    # for date in dates:
+    #     print(parse_date(date))
     doc = Document(path, ocr_tool, extractor)
     doc.read_person_data()

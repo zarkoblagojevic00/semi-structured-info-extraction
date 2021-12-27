@@ -1,20 +1,9 @@
-import datetime
-from doc import Document
+from doc import Document, Person
 from face import FaceExtractor
 import pyocr
+import datetime
 
 
-class Person:
-    """
-    Klasa koja opisuje prepoznatu osobu sa slike. Neophodno je prepoznati samo vrednosti koje su opisane u ovoj klasi
-    """
-    def __init__(self, name: str = None, date_of_birth: datetime.date = None, job: str = None, ssn: str = None,
-                 company: str = None):
-        self.name = name
-        self.date_of_birth = date_of_birth
-        self.job = job
-        self.ssn = ssn
-        self.company = company
 
 
 def extract_info(image_path: str) -> Person:
@@ -30,9 +19,10 @@ def extract_info(image_path: str) -> Person:
     extractor = FaceExtractor()
 
     doc = Document(image_path, ocr_tool, extractor)
-    text = doc.read_person_data()
+    person = doc.read_person_data()
 
-    person = Person('test', datetime.date.today(), 'test', 'test', 'test')
+    if person is None:
+        person = Person('test', datetime.date.today(), 'test', 'test', 'test')
 
     # TODO - Prepoznati sve neophodne vrednosti o osobi sa slike. Vrednosti su: Name, Date of Birth, Job,
     #       Social Security Number, Company Name
