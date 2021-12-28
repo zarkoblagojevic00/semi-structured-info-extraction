@@ -9,9 +9,9 @@ class FaceExtractor:
     def is_face_on_img(self, img):
         try:
             self.detector(img, 1)[0]
-            print("Detected face")
+            # print("Detected face")
         except Exception:
-            print("Face not detected")
+            # print("Face not detected")
             return False
         return True
 

@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from datetime import datetime
 
+from fuz import FuzzyReplacer
 
 
 class Person:
@@ -58,7 +59,7 @@ def parse_date(date: str):
     try:
         return datetime.strptime(date, format)
     except Exception:
-        print(f'Invalid date: {date}')
+        # print(f'Invalid date: {date}')
         return datetime(2020, 12, 23)
 
 
@@ -80,11 +81,12 @@ def make_black_border_img(img):
 
 class Document:
     def __init__(self, image_path: str, ocr_tool,  extractor):
-        print(image_path)
+        # print(image_path)
         self.ocr_tool = ocr_tool
         self.image = cv2.imread(image_path)
         self.lang = 'eng'
         self.extractor = extractor
+        self.fuzzy_replacer = FuzzyReplacer()
 
     def read_person_data(self):
         img_hsv = cv2.cvtColor(self.image, cv2.COLOR_BGR2HSV)
@@ -273,8 +275,8 @@ class Document:
         ssn = ""
         for i, line in enumerate(ssn_boxes):
             ssn = capitalize_words(line.content.strip())
-            print('line %d: ' % i, ssn, line.position)
-        print()
+            # print('line %d: ' % i, ssn, line.position)
+        # print()
 
         # plt.imshow(card)
         # plt.show()
@@ -300,8 +302,8 @@ class Document:
         date_of_birth = ""
         for i, line in enumerate(date_of_birth_boxes):
             date_of_birth = capitalize_words(line.content.strip())
-            print('line %d: ' % i, date_of_birth, line.position)
-        print()
+            # print('line %d: ' % i, date_of_birth, line.position)
+        # print()
 
         ################################################# NAME #########################################################
         pointer -= 3 * elem_height
@@ -326,8 +328,9 @@ class Document:
         name = ""
         for i, line in enumerate(name_boxes):
             name = capitalize_words(line.content.strip())
-            print('line %d: ' % i, name, line.position)
-        print()
+            # print('line %d: ' % i, name, line.position)
+        # print()
+
 
         ################################################# JOB #########################################################
         pointer -= elem_height
@@ -352,8 +355,9 @@ class Document:
         job = ""
         for i, line in enumerate(job_boxes):
             job = capitalize_words(line.content.strip())
-            print('line %d: ' % i, job, line.position)
-        print()
+            # print('line %d: ' % i, job, line.position)
+        # print()
+        job = self.fuzzy_replacer.convert_Lev(job)
 
         company = 'Apple'
 
@@ -379,6 +383,7 @@ class Document:
         # plt.show()
         # self.hsv_picker(card)
 
+        ################################################# NAME #########################################################
         name_boxes = self.ocr_tool.image_to_string(
             Image.fromarray(crop_name), lang=self.lang,
             builder=pyocr.builders.LineBoxBuilder(tesseract_layout=7)
@@ -387,8 +392,9 @@ class Document:
         name = ""
         for i, line in enumerate(name_boxes):
             name = capitalize_words(line.content.strip())
-            print('line %d: ' % i, name, line.position)
-        print()
+            # print('line %d: ' % i, name, line.position)
+        # print()
+
 
         crop_rest = crop_info[int(info_h / 5):, int(info_w/2.4):]
 
@@ -421,8 +427,8 @@ class Document:
         ssn = ""
         for i, line in enumerate(ssn_boxes):
             ssn = capitalize_words(line.content.strip())
-            print('line %d: ' % i, ssn, line.position)
-        print()
+            # print('line %d: ' % i, ssn, line.position)
+        # print()
 
         ################################################# JOB #########################################################
         job_height = ssn_height + dist
@@ -440,8 +446,9 @@ class Document:
         job = ""
         for i, line in enumerate(job_boxes):
             job = capitalize_words(line.content.strip())
-            print('line %d: ' % i, job, line.position)
-        print()
+            # print('line %d: ' % i, job, line.position)
+        # print()
+        job = self.fuzzy_replacer.convert_Lev(job)
 
         ################################################# DOB #########################################################
         date_of_birth_height = job_height + dist
@@ -458,8 +465,8 @@ class Document:
         date_of_birth = ""
         for i, line in enumerate(date_of_birth_boxes):
             date_of_birth = capitalize_words(line.content.strip())
-            print('line %d: ' % i, date_of_birth, line.position)
-        print()
+            # print('line %d: ' % i, date_of_birth, line.position)
+        # print()
 
         company = 'Google'
         return Person(name, parse_date(date_of_birth), job, ssn, company)
@@ -506,8 +513,10 @@ class Document:
         name = ""
         for i, line in enumerate(name_boxes):
             name = capitalize_words(line.content.strip())
-            print('line %d: ' % i, name, line.position)
-        print()
+            # print('line %d: ' % i, name, line.position)
+        # print()
+
+
 
         elem_height = int(h * 1.1)
         ################################################# SSN #########################################################
@@ -530,8 +539,8 @@ class Document:
         ssn = ""
         for i, line in enumerate(ssn_boxes):
             ssn = capitalize_words(line.content.strip())
-            print('line %d: ' % i, ssn, line.position)
-        print()
+            # print('line %d: ' % i, ssn, line.position)
+        # print()
 
         ################################################# JOB #########################################################
         pointer = pointer + elem_height
@@ -552,8 +561,9 @@ class Document:
         job = ""
         for i, line in enumerate(job_boxes):
             job = capitalize_words(line.content.strip())
-            print('line %d: ' % i, job, line.position)
-        print()
+            # print('line %d: ' % i, job, line.position)
+        # print()
+        job = self.fuzzy_replacer.convert_Lev(job)
 
         ################################################# DOB #########################################################
         pointer = pointer + elem_height
@@ -574,8 +584,8 @@ class Document:
         date_of_birth = ""
         for i, line in enumerate(date_of_birth_boxes):
             date_of_birth = capitalize_words(line.content.strip())
-            print('line %d: ' % i, date_of_birth, line.position)
-        print()
+            # print('line %d: ' % i, date_of_birth, line.position)
+        # print()
 
         company = 'IBM'
         return Person(name, parse_date(date_of_birth), job, ssn, company)

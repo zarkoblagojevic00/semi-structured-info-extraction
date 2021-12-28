@@ -15,16 +15,24 @@ def extract_info(image_path: str) -> Person:
     :param image_path: <str> Putanja do slike za obradu
     :return: Objekat tipa "Person", gde su svi atributi setovani na izvucene vrednosti
     """
+    # TODO - Prepoznati sve neophodne vrednosti o osobi sa slike. Vrednosti su: Name, Date of Birth, Job,
+    #       Social Security Number, Company Name
+
     ocr_tool = pyocr.get_available_tools()[0]
     extractor = FaceExtractor()
 
     doc = Document(image_path, ocr_tool, extractor)
-    person = doc.read_person_data()
 
-    if person is None:
-        person = Person('test', datetime.date.today(), 'test', 'test', 'test')
-
-    # TODO - Prepoznati sve neophodne vrednosti o osobi sa slike. Vrednosti su: Name, Date of Birth, Job,
-    #       Social Security Number, Company Name
+    person = Person('test', datetime.date.today(), 'test', 'test', 'test')
+    try:
+        person = doc.read_person_data()
+    except Exception:
+        pass
 
     return person
+
+
+
+
+
+
